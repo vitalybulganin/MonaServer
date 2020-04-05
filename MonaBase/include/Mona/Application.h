@@ -74,6 +74,9 @@ protected:
 	Application();
 
     bool					init(int argc, const char* argv[]);
+    //!< Supports white list.
+    auto load_white_list() -> void;
+
 	virtual int				main() = 0;
 
 	virtual bool			loadLogFiles(std::string& directory, std::string& fileName, UInt32& sizeByFile, UInt16& rotation);

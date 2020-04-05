@@ -55,3 +55,6 @@ html-template
 /UnitTests/tmp64
 /MonaCore/tmp64
 /MonaBase/tmp64
+/.idea/
+/build/
+/cmake-build-debug/

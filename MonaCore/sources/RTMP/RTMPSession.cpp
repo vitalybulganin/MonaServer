@@ -21,24 +21,46 @@ This file is a part of Mona.
 #include "Mona/Util.h"
 #include "Mona/RTMP/RTMPSender.h"
 #include "math.h"
-
-
+//-------------------------------------------------------------------------//
+#include <iostream>
+//-------------------------------------------------------------------------//
+#include <Mona/MonaFilter.h>
+//-------------------------------------------------------------------------//
 using namespace std;
-
-
+//-------------------------------------------------------------------------//
 namespace Mona {
+//-------------------------------------------------------------------------//
+    namespace {
+        #define NO_THROW(method) try { method; } catch (const std::invalid_argument & exc) { Mona::Exception warn; warn.set(Mona::Exception::FILE, exc.what()); WARN(warn); }
+    }; // namespace
+//-------------------------------------------------------------------------//
+RTMPSession::RTMPSession(const SocketAddress& peerAddress, SocketFile& file, Protocol& protocol, Invoker& invoker)
+    : _mainStream(invoker,peer),_unackBytes(0),_readBytes(0),_decrypted(0), _chunkSize(RTMP::DEFAULT_CHUNKSIZE), _winAckSize(RTMP::DEFAULT_WIN_ACKSIZE),_handshaking(0), _pWriter(NULL), TCPSession(peerAddress,file, protocol, invoker),
+ 	  onStreamStart([this](UInt16 id, FlashWriter& writer) {
+ 	      // Stream Begin signal
+ 	      (_pController ? (FlashWriter&)*_pController : writer).writeRaw().write16(0).write32(id);
 
+ 	      if (this->filter.good() != true) {
+ 	          this->filter.load(this->getFilterPath());
+          }
+          std::shared_ptr<FlashStream> stream;
+ 	      this->_mainStream.getStream(id, stream);
+          // Notifying about stopping streaming.
+          this->filter.notify(this->buildPublisherUrl(stream->name()).c_str(), 1);
+ 	  }),
+ 	  onStreamStop([this](UInt16 id, FlashWriter& writer) {
+          // Stream EOF signal
+          (_pController ? (FlashWriter&)*_pController : writer).writeRaw().write16(1).write32(id);
 
-RTMPSession::RTMPSession(const SocketAddress& peerAddress, SocketFile& file, Protocol& protocol, Invoker& invoker) : _mainStream(invoker,peer),_unackBytes(0),_readBytes(0),_decrypted(0), _chunkSize(RTMP::DEFAULT_CHUNKSIZE), _winAckSize(RTMP::DEFAULT_WIN_ACKSIZE),_handshaking(0), _pWriter(NULL), TCPSession(peerAddress,file, protocol, invoker),
-		onStreamStart([this](UInt16 id, FlashWriter& writer) {
-			// Stream Begin signal
-			(_pController ? (FlashWriter&)*_pController : writer).writeRaw().write16(0).write32(id);
-		}),
-		onStreamStop([this](UInt16 id, FlashWriter& writer) {
-			// Stream EOF signal
-			(_pController ? (FlashWriter&)*_pController : writer).writeRaw().write16(1).write32(id);
-		}) {
-	
+          if (this->filter.good() != true) {
+              this->filter.load(this->getFilterPath());
+          }
+          std::shared_ptr<FlashStream> stream;
+          this->_mainStream.getStream(id, stream);
+          // Notifying about stopping streaming.
+          this->filter.notify(this->buildPublisherUrl(stream->name()).c_str(), 2);
+ 	  })
+{
 	_mainStream.OnStart::subscribe(onStreamStart);
 	_mainStream.OnStop::subscribe(onStreamStop);
 
@@ -321,13 +343,35 @@ void RTMPSession::receive(BinaryReader& packet) {
 			// RTMFP has a complexe ack mechanism and RTMP is TCP based, ack mechanism is in system layer => so useless
 			break;
 		default: {
-			if (!channel.pStream) {
-				if(_mainStream.process(channel.type,channel.absoluteTime, reader,*_pWriter) && peer.connected)
-					_pWriter->isMain = true;
-				else if (!died)
-					kill(REJECTED_DEATH);
-			} else
-				channel.pStream->process(channel.type, channel.absoluteTime, reader, *_pWriter);
+		    auto on_accept_action = [&](const action_type & type, const std::string & publish_name, Exception & exc) -> bool {
+		        if (type == action_type::publish) {
+                    // Initializing the filter.
+                    if (this->filter.good() != true && this->getFilterPath().empty() != true) {
+                        this->filter.load(this->getFilterPath());
+                    }
+                    if (this->filter.good() != false && publish_name.empty() != true && this->filter.accept(this->buildPublisherUrl(publish_name)) != true) {
+                        exc.set(Exception::PERMISSION, "The client hasn't permission to publish a stream.");
+                        return false;
+                    }
+		        }
+		        else if (type == action_type::play) {
+                    if (this->accept_ip(this->peer.address.host().toString()) != true) {
+                        exc.set(Exception::PERMISSION, "The client hasn't permission to read the stream.");
+                        return false;
+                    }
+                }
+                return true;
+            };
+            if (!channel.pStream) {
+                if(_mainStream.process(channel.type, channel.absoluteTime, reader,*_pWriter, on_accept_action) && peer.connected)
+                    _pWriter->isMain = true;
+                else if (!died)
+                    kill(REJECTED_DEATH);
+            } else {
+                if (channel.pStream->process(channel.type, channel.absoluteTime, reader, *_pWriter, on_accept_action) != true) {
+                    //<???> this->kill(REJECTED_DEATH);
+                }
+            }
 		}
 	}
 
@@ -344,6 +388,29 @@ void RTMPSession::manage() {
 		_pController->writePing();
 	TCPSession::manage();
 }
+//-------------------------------------------------------------------------//
+    auto RTMPSession::buildPublisherUrl(const std::string & name) const noexcept -> std::string {
+        std::string url;
+        // Getting a URL's client.
+        this->peer.properties().getString("tcUrl", url);
 
+        return url + "/" + name;
+    }
 
+    auto RTMPSession::getFilterPath() const noexcept -> std::string
+    {
+        std::string path;
+        // Getting a URL's client.
+        this->peer.parameters().getString("filter.path", path);
+
+        return path;
+    }
+
+    auto RTMPSession::accept_ip(const std::string & ip) -> bool
+    {
+        std::string value;
+        // If the IP address is on white list, then returns true, otherwise false.
+        return this->peer.parameters().getString("whitelist." + ip, value);
+    }
+//-------------------------------------------------------------------------//
 } // namespace Mona

@@ -32,6 +32,18 @@ using namespace std;
 
 
 namespace Mona {
+    namespace {
+        //!< Keeps a list of supported protocols.
+        const std::string g_supported_protocols[] = {"RTMP"};
+        //!< Splits a string.
+        auto split_string(const std::string & text, char sep = ',') -> std::vector<std::string> {
+            std::vector<std::string> values;
+            // Splitting IPs addresses.
+            String::Split(text, ",", values, String::SPLIT_IGNORE_EMPTY | String::SPLIT_TRIM);
+
+            return std::move(values);
+        }
+    }
 
 static const char* LogLevels[] = { "FATAL", "CRITIC", "ERROR", "WARN", "NOTE", "INFO", "DEBUG", "TRACE" };
 
@@ -92,7 +104,16 @@ bool Application::init(int argc, const char* argv[]) {
 		setString("application.configPath", configPath);
 		setString("application.configDir", FileSystem::GetParent(configPath));
 	}
-
+    {// If we have no filter path to library, sets default path.
+        std::string filter_path;
+        for (const auto & protocol : g_supported_protocols) {
+            if (this->getString(protocol + ".filter.path", filter_path) != true && this->getString("application.dir", filter_path) != false) {
+                this->setString(protocol + ".filter.path", filter_path +  + "libMonaFilter.so");
+            }
+        }
+    }
+	// Adding a white list support.
+	this->load_white_list();
 	// logs
 	Logs::SetLogger(*this);
 
@@ -129,6 +150,22 @@ bool Application::init(int argc, const char* argv[]) {
 		return false;
 	}
 	return true;
+}
+
+auto Application::load_white_list() -> void {
+    std::string values;
+    for (const auto & protocol : g_supported_protocols) {
+        values.clear();
+        // Getting a white list of special protocol.
+        this->getString(protocol + ".whitelist", values);
+        // Splitting the list of IPs.
+        const auto whitelist = split_string(values);
+        // Saving the white list for the protocol.
+        for (const auto & ip : whitelist) {
+            // Saving this ip into the parameters.
+            this->setString(protocol + ".whitelist." + ip, ip);
+        }
+    }
 }
 
 bool Application::loadConfigurations(string& path) {

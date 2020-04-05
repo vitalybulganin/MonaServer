@@ -52,6 +52,10 @@ FlashStream* FlashMainStream::getStream(UInt16 id,shared_ptr<FlashStream>& pStre
 	return (pStream = it->second).get();
 }
 
+void FlashMainStream::messageHandler(const std::string& name, AMFReader& message, FlashWriter& writer, const std::string & publish_name) {
+    this->messageHandler(name, message, writer);
+}
+
 void FlashMainStream::messageHandler(const string& name,AMFReader& message,FlashWriter& writer) {
 	if(name=="connect") {
 		message.stopReferencing();

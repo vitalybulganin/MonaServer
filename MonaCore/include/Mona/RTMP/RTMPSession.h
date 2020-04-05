@@ -24,7 +24,9 @@ This file is a part of Mona.
 #include "Mona/FlashMainStream.h"
 #include "Mona/RTMP/RTMPWriter.h"
 #include "Mona/RTMP/RTMPHandshaker.h"
-
+//-------------------------------------------------------------------------//
+#include <Mona/MonaFilter.h>
+//-------------------------------------------------------------------------//
 namespace Mona {
 
 class RTMPSession : public TCPSession, public virtual Object {
@@ -46,6 +48,26 @@ private:
 	const std::shared_ptr<RC4_KEY>&	pEncryptKey() { if (_handshaking == 1) readKeys(); return _pEncryptKey; }
 	const std::shared_ptr<RC4_KEY>&	pDecryptKey() { if (_handshaking == 1) readKeys(); return _pDecryptKey; }
 
+	/**
+	 * Gets a client url.
+	 * @param name [in] - A name of publisher.
+	 * @return Client url.
+	 */
+	auto buildPublisherUrl(const std::string & name) const noexcept -> std::string;
+
+	/**
+	 * Gets a path to filter library.
+	 * @return Path.
+	 */
+	auto getFilterPath() const noexcept -> std::string;
+
+	/**
+	 * Checks the IP address on acceptance in white list.
+	 * @param ip [in] - IP address.
+	 * @return true, if the IP is acceptable, otherwise false.
+	 */
+	auto accept_ip(const std::string & ip) -> bool;
+
 	FlashStream::OnStart::Type		onStreamStart;
 	FlashStream::OnStart::Type		onStreamStop;
 
@@ -66,6 +88,8 @@ private:
 
 	FlashMainStream						_mainStream;
 	UInt32								_decrypted;
+	//!< Keeps mona filter.
+	Mona::MonaFilter filter;
 };
 
 

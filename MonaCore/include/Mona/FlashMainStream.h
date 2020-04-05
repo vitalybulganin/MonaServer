@@ -36,7 +36,8 @@ public:
 	void flush() {for(auto& it : _streams) it.second->flush(); }
 	
 private:
-	void	messageHandler(const std::string& name, AMFReader& message, FlashWriter& writer);
+	virtual void messageHandler(const std::string& name, AMFReader& message, FlashWriter& writer) override;
+	virtual void messageHandler(const std::string& name, AMFReader& message, FlashWriter& writer, const std::string & publish_name) override;
 	void	rawHandler(UInt16 type, PacketReader& packet, FlashWriter& writer);
 
 	std::map<UInt16,std::shared_ptr<FlashStream>>	_streams;

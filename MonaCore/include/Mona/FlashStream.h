@@ -25,12 +25,18 @@ This file is a part of Mona.
 #include "Mona/FlashWriter.h"
 #include "Mona/Invoker.h"
 
+#include <functional>
+
 namespace Mona {
 
 namespace FlashEvents {
 	struct OnStart : Event<void(UInt16 id, FlashWriter& writer)> {};
 	struct OnStop : Event<void(UInt16 id, FlashWriter& writer)> {};
 };
+//!< Keeps a type of supported action/
+enum class action_type : int {unknown = 0, connect = 1, create_stream, close_stream, publish, play};
+//!<
+using fn_acctept_t = std::function<bool(const action_type & type, const std::string & publisher_name, Mona::Exception & exc)>;
 
 class FlashStream : public virtual Object,
 	public FlashEvents::OnStart,
@@ -47,17 +53,26 @@ public:
 	void	disengage(FlashWriter* pWriter=NULL);
 
 	// return flase if writer is closed!
-	bool	process(AMF::ContentType type,UInt32 time,PacketReader& packet,FlashWriter& writer,double lostRate=0);
+	bool process(AMF::ContentType type,UInt32 time,PacketReader& packet,FlashWriter& writer,double lostRate=0);
+	auto process(AMF::ContentType type, UInt32 time, PacketReader & packet, FlashWriter& writer, const fn_acctept_t & onaccept, const double & lostRate = 0.0) -> bool;
+
+	/**
+	 * Gets a name of publish.
+	 * @return Publish name.
+	 */
+	auto name() const noexcept -> std::string;
 
 	virtual void	flush() { if(_pPublication) _pPublication->flush(); }
 
 protected:
-
 	Invoker&		invoker;
 	Peer&			peer;
+	//!< Keeps a publish name.
+	std::string publish_name;
 
 private:
 
+	virtual void	messageHandler(const std::string& name, AMFReader& message, FlashWriter& writer, const std::string & publication_name);
 	virtual void	messageHandler(const std::string& name, AMFReader& message, FlashWriter& writer);
 	virtual void	rawHandler(UInt16 type, PacketReader& data, FlashWriter& writer);
 	virtual void	dataHandler(DataReader& data, double lostRate);
