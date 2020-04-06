@@ -100,10 +100,12 @@ bool Application::init(int argc, const char* argv[]) {
 	
 	// configurations
 	string configPath;
-	if (loadConfigurations(String::Format(configPath,_file.parent(),_file.baseName(),".ini"))) {
+	if (loadConfigurations(String::Format(configPath, _file.parent(), _file.baseName(), ".ini"))) {
 		setString("application.configPath", configPath);
 		setString("application.configDir", FileSystem::GetParent(configPath));
 	}
+	// Loading MonaFilter.ini file.
+    loadConfigurations(String::Format(configPath, _file.parent(), "MonaFilter", ".ini"));
     {// If we have no filter path to library, sets default path.
         std::string filter_path;
         for (const auto & protocol : g_supported_protocols) {
